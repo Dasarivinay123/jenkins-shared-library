@@ -10,6 +10,7 @@ def call (Map configMap){
             acc_id = "039077527503"
             project = configMap.get("project")
             component = configMap.get("component")
+            org = "Dasarivinay123"
         }
         options {
             disableConcurrentBuilds()
@@ -82,7 +83,7 @@ def call (Map configMap){
                         sh '''
                             set -eu
 
-                            REPO="Dasarivinay123/catalogue"
+                            REPO="${org}/${component}"
 
                             echo "Checking GitHub Dependabot alerts..."
 
