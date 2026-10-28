@@ -13,6 +13,7 @@ def call (Map configMap){
                             echo 'Building..'
                             echo 'Project: ${project}'
                             echo 'Component: ${component}'
+                            printenv | sort
                         """
                     }
                     
