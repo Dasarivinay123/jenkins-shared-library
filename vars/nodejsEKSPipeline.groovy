@@ -29,10 +29,11 @@ def call (Map configMap){
                 steps{
                     script {
                         def packageJson = readJSON file: 'package.json'
-                        // Extract the version property
                         appVersion = packageJson.version
+
                         echo "The application version is: ${appVersion}"
-                        printenv
+
+                        sh 'printenv'
                     }
                 }
             }
