@@ -87,66 +87,94 @@ def call (Map configMap){
             }
             stage('Check Dependabot Alerts') {
                 steps {
-                    withCredentials([
-                        string(credentialsId: 'github-token', variable: 'GH_TOKEN')
-                    ]) {
-                        sh '''
-                            set -eu
+                    script {
+                        try {
+                            int highCriticalCount = 0
 
-                            REPO="${org}/${component}"
+                            withCredentials([
+                                string(credentialsId: 'github-token', variable: 'GH_TOKEN')
+                            ]) {
+                                sh '''
+                                    set -eu
 
-                            echo "Checking GitHub Dependabot alerts..."
+                                    REPO="${org}/${component}"
 
-                            HTTP_STATUS=$(curl -sS -L \
-                                -o alerts.json \
-                                -w "%{http_code}" \
-                                -H "Accept: application/vnd.github+json" \
-                                -H "Authorization: Bearer ${GH_TOKEN}" \
-                                -H "X-GitHub-Api-Version: 2022-11-28" \
-                                "https://api.github.com/repos/${REPO}/dependabot/alerts?state=open&per_page=100")
+                                    echo "Checking GitHub Dependabot alerts..."
 
-                            if [ "$HTTP_STATUS" != "200" ]; then
-                                echo "GitHub API request failed. HTTP status: ${HTTP_STATUS}"
-                                cat alerts.json
-                                exit 1
-                            fi
+                                    HTTP_STATUS=$(curl -sS -L \
+                                        -o alerts.json \
+                                        -w "%{http_code}" \
+                                        -H "Accept: application/vnd.github+json" \
+                                        -H "Authorization: Bearer ${GH_TOKEN}" \
+                                        -H "X-GitHub-Api-Version: 2022-11-28" \
+                                        "https://api.github.com/repos/${REPO}/dependabot/alerts?state=open&per_page=100")
 
-                            if ! jq -e 'type == "array"' alerts.json > /dev/null; then
-                                echo "Invalid GitHub API response."
-                                cat alerts.json
-                                exit 1
-                            fi
+                                    if [ "$HTTP_STATUS" != "200" ]; then
+                                        echo "GitHub API request failed. HTTP status: ${HTTP_STATUS}"
+                                        cat alerts.json
+                                        exit 1
+                                    fi
 
-                            echo "---- Open Dependabot Alerts ----"
+                                    if ! jq -e 'type == "array"' alerts.json > /dev/null; then
+                                        echo "Invalid GitHub API response."
+                                        cat alerts.json
+                                        exit 1
+                                    fi
 
-                            jq -r '
-                                if length == 0 then
-                                    "No open Dependabot alerts found."
-                                else
-                                    .[] |
-                                    "Alert: \\(.number) | Severity: \\(.security_vulnerability.severity) | Package: \\(.dependency.package.name) | Advisory: \\(.security_advisory.ghsa_id)"
-                                end
-                            ' alerts.json
+                                    echo "---- Open Dependabot Alerts ----"
 
-                            HIGH_CRITICAL_COUNT=$(jq '[
-                                .[] |
-                                select(
-                                    .security_vulnerability.severity == "high" or
-                                    .security_vulnerability.severity == "critical"
-                                )
-                            ] | length' alerts.json)
+                                    jq -r '
+                                        if length == 0 then
+                                            "No open Dependabot alerts found."
+                                        else
+                                            .[] |
+                                            "Alert: \\(.number) | Severity: \\(.security_vulnerability.severity) | Package: \\(.dependency.package.name) | Advisory: \\(.security_advisory.ghsa_id)"
+                                        end
+                                    ' alerts.json
 
-                            echo "High/Critical alert count: ${HIGH_CRITICAL_COUNT}"
+                                    HIGH_CRITICAL_COUNT=$(jq '[
+                                        .[] |
+                                        select(
+                                            .security_vulnerability.severity == "high" or
+                                            .security_vulnerability.severity == "critical"
+                                        )
+                                    ] | length' alerts.json)
 
-                            if [ "$HIGH_CRITICAL_COUNT" -gt 0 ]; then
+                                    echo "High/Critical alert count: ${HIGH_CRITICAL_COUNT}"
+                                    printf '%s\\n' "$HIGH_CRITICAL_COUNT" > high-critical-count.txt
+                                '''
+
+                                highCriticalCount = readFile('high-critical-count.txt').trim().toInteger()
+                            }
+
+                            if (highCriticalCount > 0) {
                                 echo "High/Critical dependency alerts found. Failing build."
-                                utils.updateCommitStatus('failure', 'Library scan failed', 'library-scan')
-                                exit 1
-                            else
+
+                                utils.updateCommitStatus(
+                                    'failure',
+                                    'Library scan failed',
+                                    'library-scan'
+                                )
+
+                                error("Found ${highCriticalCount} High/Critical Dependabot alerts.")
+                            } else {
                                 echo "No High/Critical dependency alerts found."
-                                utils.updateCommitStatus('success', 'Library scan passed', 'library-scan')
-                            fi
-                        '''
+
+                                utils.updateCommitStatus(
+                                    'success',
+                                    'Library scan passed',
+                                    'library-scan'
+                                )
+                            }
+
+                        } catch (Exception e) {
+                            utils.updateCommitStatus(
+                                'failure',
+                                'Dependabot alerts check failed',
+                                'dependabot-check'
+                            )
+                            throw e
+                        }
                     }
                 }
             }
