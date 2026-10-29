@@ -236,9 +236,10 @@ def call (Map configMap){
                                 """
                             }
                             utils.updateCommitStatus('success', 'push image to ECR', 'push-image')
-                    } catch (Exception e) {
-                        utils.updateCommitStatus('failure', 'Docker image push failed', 'push-image')
-                        throw e
+                        } catch (Exception e) {
+                            utils.updateCommitStatus('failure', 'Docker image push failed', 'push-image')
+                            throw e
+                        }
                     }
                 }
             }
