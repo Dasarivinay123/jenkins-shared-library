@@ -76,7 +76,10 @@ def call (Map configMap){
                         script {
                             def qg = waitForQualityGate() // Pauses pipeline
                             if (qg.status != 'OK') {
+                                utils.updateCommitStatus('FAILURE', 'Sonar Scan failed', 'sonar-scan')
                                 error "Pipeline aborted: ${qg.status}"
+                            }else{
+                                 utils.updateCommitStatus('success', 'Sonar Scan success', 'sonar-scan')
                             }
                         }
                     }
@@ -137,9 +140,11 @@ def call (Map configMap){
 
                             if [ "$HIGH_CRITICAL_COUNT" -gt 0 ]; then
                                 echo "High/Critical dependency alerts found. Failing build."
+                                utils.updateCommitStatus('failure', 'Library scan failed', 'library-scan')
                                 exit 1
                             else
                                 echo "No High/Critical dependency alerts found."
+                                utils.updateCommitStatus('success', 'Library scan passed', 'library-scan')
                             fi
                         '''
                     }
@@ -149,11 +154,18 @@ def call (Map configMap){
                 steps {
                     script {
                         // in this block we get aws authentication
-                        withAWS(credentials: 'aws_creds', region: 'us-east-1') {
-                            sh """
-                                aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${acc_id}.dkr.ecr.us-east-1.amazonaws.com
-                                docker build -t ${acc_id}.dkr.ecr.us-east-1.amazonaws.com/${project}/${component}:${appVersion} .
-                            """
+                        try {
+                            withAWS(credentials: 'aws_creds', region: 'us-east-1') {
+                                sh """
+                                    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${acc_id}.dkr.ecr.us-east-1.amazonaws.com
+                                    docker build -t ${acc_id}.dkr.ecr.us-east-1.amazonaws.com/${project}/${component}:${appVersion} .
+                                """
+                            }
+                            utils.updateCommitStatus('success', 'Docker image build', 'build-image')
+                        } 
+                        catch (Exception e) {
+                            utils.updateCommitStatus('failure', 'Docker image build failed', 'build-image')
+                            throw e
                         }
                     }
                 }
@@ -176,7 +188,10 @@ def call (Map configMap){
                         )
 
                         if (dockerfileScan != 0 || imageScan != 0) {
+                              utils.updateCommitStatus('failure', 'Trivy scan failed', 'trivy-scan')
                             error "Trivy found HIGH/CRITICAL issues in Dockerfile and/or OS packages. Failing pipeline."
+                        } else {
+                            utils.updateCommitStatus('success', 'Trivy scan passed', 'trivy-scan')
                         }
                     }
                 }
