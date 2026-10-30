@@ -37,7 +37,7 @@ def call (Map configMap){
                     }
                 }
             }
-            stage('Deploy') {
+            stage('Dev Deploy') {
                 steps {
                     script {
                          try {
@@ -74,6 +74,31 @@ def call (Map configMap){
                         }
                         catch (Exception e) {
                             utils.updateCommitStatus('failure', 'catalogue-api-tests failed', 'api-tests')
+                            throw e
+                        }
+                    }
+                }
+            }
+            stage('promote-image') {
+                when {
+                    expression { env_ENVIRONMENT == 'dev' }
+                }
+                steps {
+                    script {
+                        try {
+                            withAWS(credentials: 'aws-creds', region: 'us-east-1') {
+                                sh """
+                                    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${acc_id}.dkr.ecr.us-east-1.amazonaws.com
+
+                                    docker pull ${acc_id}.dkr.ecr.us-east-1.amazonaws.com/${project}/${component}:${appVersion}
+                                    docker tag ${acc_id}.dkr.ecr.us-east-1.amazonaws.com/${project}/${component}:${appVersion} ${acc_id}.dkr.ecr.us-east-1.amazonaws.com/${project}/${component}:${env.GIT_COMMIT}
+                                    docker push ${acc_id}.dkr.ecr.us-east-1.amazonaws.com/${project}/${component}:${env.GIT_COMMIT}
+                                """
+                            }
+                            utils.updateCommitStatus('success', "Promoted image as ${env.GIT_COMMIT}", 'promote-image')
+                        }
+                        catch (Exception e) {
+                            utils.updateCommitStatus('failure', 'Image promotion failed', 'promote-image')
                             throw e
                         }
                     }
