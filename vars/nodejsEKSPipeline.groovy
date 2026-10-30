@@ -248,20 +248,25 @@ def call (Map configMap){
                 }
             }
             stage('Deploy') {
-                when {
-                    expression { return params.DEPLOY }
-                }
-                input {
-                    message "Should we continue?"
-                    ok "Yes, we should."
-                    submitter "alice,bob"
-                    parameters {
-                        string(name: 'PERSON', defaultValue: 'Mr Jenkins', description: 'Who should I say hello to?')
-                    }
-                }
                 steps {
                     script {
-                        echo 'Deploying....'
+                         try {
+                            withAWS(credentials: 'aws-creds', region: 'us-east-1') {
+                                sh """
+                                    aws eks update-kubeconfig --name roboshop --region us-east-1
+                                    cd helm
+                                    helm upgrade --install -f values-dev.yaml -n roboshop-dev \
+                                    --set deployment.imageVersion=${appVersion} \
+                                    --wait --timeout 5m 
+                                    kubectl rollout status deployment/${component} -n roboshop-dev
+                                """
+                            }
+                            utils.updateCommitStatus('success', 'Deployed to roboshop-dev', 'dev-deploy')
+                        }
+                        catch (Exception e) {
+                            utils.updateCommitStatus('failure', 'Deploy to roboshop-dev failed', 'dev-deploy')
+                            throw e
+                        }
                     }
                 }
             }
