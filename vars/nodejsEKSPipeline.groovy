@@ -252,14 +252,16 @@ def call (Map configMap){
                     script {
                          try {
                             withAWS(credentials: 'aws_creds', region: 'us-east-1') {
-                                sh """
-                                    aws eks update-kubeconfig --name roboshop --region us-east-1
-                                    cd helm
-                                    helm upgrade --install -f values-dev.yaml -n roboshop-dev \
-                                    --set deployment.imageVersion=${appVersion} \
-                                    --wait --timeout 5m 
-                                    kubectl rollout status deployment/${component} -n roboshop-dev --timeout=2m
-                                """
+                                    sh """
+                                        aws eks update-kubeconfig --name roboshop --region us-east-1
+                                        cd helm
+                                        helm upgrade --install catalogue . \
+                                            -f values-dev.yaml \
+                                            -n roboshop-dev \
+                                            --set deployment.imageVersion=${appVersion} \
+                                            --wait --timeout 5m
+                                        kubectl rollout status deployment/${component} -n roboshop-dev --timeout=2m
+                                    """
                             }
                             utils.updateCommitStatus('success', 'Deployed to roboshop-dev', 'dev-deploy')
                         }
