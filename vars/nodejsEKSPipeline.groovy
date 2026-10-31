@@ -301,6 +301,24 @@ def call (Map configMap){
                 }
             }
         }
+        stage('raise-pr') {
+                when {
+                    not { branch 'main' }
+                }
+                steps {
+                    script {
+                        try {
+                            utils.createPullRequest('main', "${component}: ${env.BRANCH_NAME} -> main", "Automated PR after successful dev-deploy and api-tests.\n\nBuild: ${env.BUILD_URL}console")
+                            utils.updateCommitStatus('success', 'PR raised/verified', 'raise-pr')
+                        }
+                        catch (Exception e) {
+                            utils.updateCommitStatus('failure', 'Failed to raise PR', 'raise-pr')
+                            throw e
+                        }
+                    }
+                }
+            }
+        }
         post { 
             always { 
                 echo 'I will always say Hello again!'
